@@ -23,9 +23,11 @@ services:
     build: ./proxy-service
     environment:
       PROXY_SERVICE_ADDR: ":9000"
-      # Demo seeds — replace with real proxies. The service still runs (and the
-      # scraper falls back to a direct connection) if these are unreachable.
-      PROXY_SEEDS: "http://198.51.100.10:8080,http://198.51.100.11:3128"
+      # Starts with an empty pool so the demo scrapes go out directly and fast.
+      # Add real proxies to watch rotation + health tracking in action, e.g.:
+      #   PROXY_SEEDS: "http://user:pass@host:port,http://host2:port"
+      # or at runtime:  curl -XPOST localhost:9000/proxies -d '{"proxy":"http://…"}'
+      PROXY_SEEDS: ""
       PROXY_MAX_FAILURES: "3"
       PROXY_COOLDOWN: "60s"
     ports:
