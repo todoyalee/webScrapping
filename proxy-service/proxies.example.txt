@@ -1,0 +1,7 @@
+# One proxy URL per line. Blank lines and lines starting with "#" are ignored.
+# Point PROXY_SEED_FILE at a copy of this file, or pass PROXY_SEEDS as a
+# comma-separated list. Add/remove proxies at runtime via POST /proxies.
+
+# http://user:pass@198.51.100.10:8080
+# http://198.51.100.11:3128
+# socks5://203.0.113.7:1080
