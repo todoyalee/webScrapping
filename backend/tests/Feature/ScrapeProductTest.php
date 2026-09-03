@@ -134,4 +134,50 @@ class ScrapeProductTest extends TestCase
             $spy->reports,
         );
     }
+
+    public function test_it_falls_back_to_a_direct_connection_when_every_proxy_fails(): void
+    {
+        $html = file_get_contents(base_path('tests/Fixtures/product.html'));
+        // 3 proxied attempts (retries=2) all refuse, then the direct attempt works.
+        $mock = new MockHandler([
+            new ConnectException('refused', new Request('GET', self::URL)),
+            new ConnectException('refused', new Request('GET', self::URL)),
+            new ConnectException('refused', new Request('GET', self::URL)),
+            new Response(200, [], $html),
+        ]);
+        $client = new Client(['handler' => HandlerStack::create($mock)]);
+        $this->app->bind(HttpClientFactory::class, fn () => new class($client) implements HttpClientFactory
+        {
+            public function __construct(private ClientInterface $client) {}
+
+            public function make(array $overrides = []): ClientInterface
+            {
+                return $this->client;
+            }
+        });
+
+        $spy = new class implements ProxyProvider
+        {
+            public array $reports = [];
+
+            public function next(): ?string
+            {
+                return 'http://dead.proxy:9999';
+            }
+
+            public function report(string $proxy, bool $ok): void
+            {
+                $this->reports[] = [$proxy, $ok];
+            }
+        };
+        $this->app->instance(ProxyProvider::class, $spy);
+
+        $this->artisan('scrape:product', ['url' => self::URL])->assertSuccessful();
+
+        $this->assertDatabaseHas('products', ['title' => 'A Light in the Attic', 'source_url' => self::URL]);
+        $this->assertSame(
+            [['http://dead.proxy:9999', false], ['http://dead.proxy:9999', false], ['http://dead.proxy:9999', false]],
+            $spy->reports,
+        );
+    }
 }

@@ -13,7 +13,8 @@ use Symfony\Component\DomCrawler\UriResolver;
  * Fetches a single eCommerce product page and extracts its title, price and
  * image. Each request goes out through a rotated User-Agent and, when enabled,
  * an upstream proxy borrowed from the Go proxy-service. Failed proxies are
- * reported back and the request is retried.
+ * reported back and the request is retried; if every proxied attempt fails the
+ * scraper falls back to one direct connection before giving up.
  */
 final class ProductScraper
 {
@@ -47,9 +48,11 @@ final class ProductScraper
     private function fetch(string $url): string
     {
         $lastError = 'unknown error';
+        $triedDirect = false;
 
         for ($attempt = 0; $attempt <= $this->retries; $attempt++) {
             $proxy = $this->proxies->next();
+            $triedDirect = $triedDirect || $proxy === null;
             $options = $proxy !== null ? ['proxy' => $proxy] : [];
 
             try {
@@ -68,6 +71,16 @@ final class ProductScraper
                 if ($proxy !== null) {
                     $this->proxies->report($proxy, false);
                 }
+            }
+        }
+
+        // Every proxied attempt failed. Try once more without a proxy so an
+        // unhealthy pool degrades to a direct connection instead of failing.
+        if (! $triedDirect) {
+            try {
+                return (string) $this->clients->make()->request('GET', $url)->getBody();
+            } catch (GuzzleException $e) {
+                $lastError = $e->getMessage();
             }
         }
 
