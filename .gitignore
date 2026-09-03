@@ -1,0 +1,28 @@
+# OS / editor / tooling
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+.qodo/
+
+# Node
+node_modules/
+.next/
+npm-debug.log*
+
+# PHP
+/backend/vendor/
+/backend/.phpunit.cache/
+
+# Env files (each service ships a .env.example)
+.env
+.env.local
+*.env.local
+
+# Go
+/proxy-service/proxy-service
+/proxy-service/proxies.txt
+
+# Build output
+/frontend/out/
