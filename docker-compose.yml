@@ -1,0 +1,89 @@
+name: proxyscrape
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: proxyscrape
+      MYSQL_USER: proxyscrape
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
+    # Not published to the host — only the backend needs it, over the compose
+    # network. Add a compose.override.yml with a ports mapping if you want a
+    # local client to connect.
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uproxyscrape", "-psecret"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  proxy-service:
+    build: ./proxy-service
+    environment:
+      PROXY_SERVICE_ADDR: ":9000"
+      # Demo seeds — replace with real proxies. The service still runs (and the
+      # scraper falls back to a direct connection) if these are unreachable.
+      PROXY_SEEDS: "http://198.51.100.10:8080,http://198.51.100.11:3128"
+      PROXY_MAX_FAILURES: "3"
+      PROXY_COOLDOWN: "60s"
+    ports:
+      - "9000:9000"
+
+  backend:
+    build: ./backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+      proxy-service:
+        condition: service_started
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: proxyscrape
+      DB_USERNAME: proxyscrape
+      DB_PASSWORD: secret
+      FRONTEND_ORIGIN: http://localhost:3000
+      PROXY_SERVICE_ENABLED: "true"
+      PROXY_SERVICE_URL: http://proxy-service:9000
+    ports:
+      - "8000:8000"
+
+  # Periodic re-scrape so the frontend always has fresh data.
+  scheduler:
+    build: ./backend
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: proxyscrape
+      DB_USERNAME: proxyscrape
+      DB_PASSWORD: secret
+      PROXY_SERVICE_ENABLED: "true"
+      PROXY_SERVICE_URL: http://proxy-service:9000
+    command: ["sh", "-c", "php artisan schedule:work"]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      # SSR runs inside the compose network, so it reaches the backend by name.
+      API_BASE_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  mysql-data:
